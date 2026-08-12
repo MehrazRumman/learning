@@ -1,4 +1,4 @@
-# Kubernetes Study Notes — Lessons 1 to 17
+# Kubernetes Study Notes — Lessons 1 to 20
 
 A beginner-friendly Kubernetes study guide covering the lessons learned so far.
 
@@ -1658,4 +1658,355 @@ Secret    → passwords / tokens / credentials
 ```text
 Liveness  → restart if unhealthy
 Readiness → stop sending traffic until ready
+```
+
+# Kubernetes Study Notes — Lessons 18 to 20
+
+---
+
+# Lesson 18 — CPU and Memory Requests & Limits
+
+A Kubernetes Node has limited CPU and memory.
+
+Example:
+
+```text
+Node 1
+CPU:    4 cores
+Memory: 8 GB
+```
+
+Multiple Pods may run on the same Node:
+
+```text
+Node 1
+├── Pod A
+├── Pod B
+├── Pod C
+└── Pod D
+```
+
+Kubernetes needs to know how much CPU and memory each Pod needs.
+
+That is where **resource requests** and **resource limits** are used.
+
+## Resource Requests
+
+A request tells Kubernetes:
+
+> This container needs at least this much CPU and memory for scheduling purposes.
+
+Example:
+
+```yaml
+resources:
+  requests:
+    cpu: "250m"
+    memory: "256Mi"
+```
+
+This means:
+
+```text
+CPU:    0.25 CPU core
+Memory: 256 MiB
+```
+
+The Kubernetes **Scheduler** uses resource requests when deciding which Node can run a Pod.
+
+## CPU Units
+
+```text
+1000m = 1 CPU core
+500m  = 0.5 CPU core
+250m  = 0.25 CPU core
+100m  = 0.1 CPU core
+```
+
+## Resource Limits
+
+A limit tells Kubernetes:
+
+> Do not let this container use more than this amount.
+
+Example:
+
+```yaml
+resources:
+  limits:
+    cpu: "1"
+    memory: "512Mi"
+```
+
+A complete example:
+
+```yaml
+resources:
+  requests:
+    cpu: "250m"
+    memory: "256Mi"
+  limits:
+    cpu: "1"
+    memory: "512Mi"
+```
+
+Remember:
+
+```text
+Request
+→ Used for scheduling
+
+Limit
+→ Maximum allowed resource usage
+```
+
+If a container exceeds its memory limit, it may be terminated with:
+
+```text
+OOMKilled
+```
+
+`OOM` means **Out Of Memory**.
+
+## Example Go Backend Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: go-api
+  template:
+    metadata:
+      labels:
+        app: go-api
+    spec:
+      containers:
+        - name: go-api
+          image: my-go-api:v1
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+```
+
+With 3 replicas:
+
+```text
+CPU requests:
+250m × 3 = 750m
+
+Memory requests:
+128Mi × 3 = 384Mi
+```
+
+## Mental Model
+
+```text
+Deployment
+   ↓
+ReplicaSet
+   ↓
+Pod
+   ↓
+Container
+   │
+   ├── CPU request
+   ├── CPU limit
+   ├── Memory request
+   └── Memory limit
+```
+
+---
+
+# Lesson 19 — Horizontal Pod Autoscaler (HPA)
+
+The **Horizontal Pod Autoscaler (HPA)** automatically changes the number of Pod replicas based on workload.
+
+Example:
+
+```text
+Low traffic
+→ 3 Pods
+
+High traffic
+→ HPA scales up
+→ 8 Pods
+```
+
+When traffic falls, HPA can scale down again.
+
+Example configuration:
+
+```text
+Minimum replicas: 2
+Maximum replicas: 10
+Target CPU: 70%
+```
+
+Example command:
+
+```bash
+kubectl autoscale deployment go-api   --cpu-percent=70   --min=2   --max=10
+```
+
+This means roughly:
+
+> Keep between 2 and 10 Pods and scale based on CPU utilization.
+
+## Important Distinction
+
+HPA scales **Pods**, not Nodes.
+
+```text
+HPA
+ ↓
+Deployment replicas
+ ↓
+More or fewer Pods
+```
+
+## HPA + Scheduler
+
+```text
+Traffic increases
+      ↓
+HPA
+      ↓
+Deployment replicas increase
+      ↓
+ReplicaSet creates Pods
+      ↓
+Scheduler places Pods on Nodes
+```
+
+## Not Enough Node Capacity
+
+If HPA wants 10 Pods but your Nodes only have room for 6:
+
+```text
+6 Pods Running
+4 Pods Pending
+```
+
+HPA can request more Pods, but it does not directly add Worker Nodes.
+
+## Horizontal vs Vertical Scaling
+
+```text
+Horizontal scaling → more replicas / more Pods
+Vertical scaling   → more CPU or memory per workload
+```
+
+## Mental Model
+
+```text
+Requests / Limits
+→ how much resource each Pod needs
+
+HPA
+→ how many Pods should exist
+```
+
+---
+
+# Lesson 20 — Cluster Autoscaler
+
+Sometimes HPA creates more Pods, but the existing Worker Nodes are full.
+
+Example:
+
+```text
+Node 1 → full
+Node 2 → full
+
+Pod 7 → Pending
+Pod 8 → Pending
+```
+
+This is where the **Cluster Autoscaler** helps.
+
+## What It Does
+
+```text
+HPA
+→ scales Pods
+
+Cluster Autoscaler
+→ scales Worker Nodes
+```
+
+Example:
+
+```text
+Cluster Autoscaler
+        ↓
+Adds Node 3
+        ↓
+Scheduler
+        ↓
+Pending Pods can run
+```
+
+## Full Scaling Flow
+
+```text
+Traffic increases
+      ↓
+HPA
+      ↓
+More Pods requested
+      ↓
+No Node capacity
+      ↓
+Pods remain Pending
+      ↓
+Cluster Autoscaler
+      ↓
+More Nodes added
+      ↓
+Scheduler places Pods
+```
+
+## Scaling Down
+
+When traffic drops:
+
+```text
+HPA
+10 Pods → 3 Pods
+      ↓
+Some Nodes become unnecessary
+      ↓
+Cluster Autoscaler
+4 Nodes → 2 Nodes
+```
+
+This can reduce infrastructure cost.
+
+## Combined Mental Model
+
+```text
+Users
+  ↓
+Traffic
+  ↓
+HPA
+  ↓
+More / Fewer Pods
+  ↓
+Scheduler
+  ↓
+Worker Nodes
+  ↑
+Cluster Autoscaler
+  ↓
+More / Fewer Nodes
 ```
