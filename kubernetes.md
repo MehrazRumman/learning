@@ -1,4 +1,4 @@
-# Kubernetes Study Notes — Lessons 1 to 20
+# Kubernetes Study Notes — Lessons 1 to 21
 
 A beginner-friendly Kubernetes study guide covering the lessons learned so far.
 
@@ -2010,3 +2010,509 @@ Cluster Autoscaler
   ↓
 More / Fewer Nodes
 ```
+
+# Lesson 21 — Run Kubernetes Locally with Minikube
+
+Until now, we have learned Kubernetes concepts such as:
+
+```text
+Deployment
+    ↓
+ReplicaSet
+    ↓
+Pods
+    ↓
+Containers
+
+HPA → scales Pods
+Cluster Autoscaler → scales Nodes
+```
+
+Now we will start working with Kubernetes practically.
+
+## What is Minikube?
+
+Normally, Kubernetes runs as a cluster with multiple machines:
+
+```text
+Kubernetes Cluster
+│
+├── Control Plane
+│
+├── Worker Node 1
+├── Worker Node 2
+└── Worker Node 3
+```
+
+But while learning Kubernetes, we usually do not want to rent several cloud servers.
+
+**Minikube** lets us create a small Kubernetes cluster on our own computer.
+
+Think of it like this:
+
+```text
+Your Laptop
+    │
+    └── Minikube
+          │
+          └── Kubernetes Cluster
+                │
+                └── Node
+                     └── Pods
+```
+
+Minikube is mainly useful for:
+
+- Learning Kubernetes
+- Local development
+- Testing Kubernetes YAML files
+- Experimenting with Deployments, Services, ConfigMaps, and other Kubernetes resources
+
+---
+
+## Step 1 — Start Minikube
+
+After installing Minikube, run:
+
+```bash
+minikube start
+```
+
+Minikube creates a local Kubernetes cluster.
+
+Conceptually:
+
+```text
+Your Computer
+     ↓
+Minikube VM / Container
+     ↓
+Kubernetes
+     ↓
+Control Plane + Worker Node
+```
+
+Then check the available nodes:
+
+```bash
+kubectl get nodes
+```
+
+Example output:
+
+```text
+NAME       STATUS   ROLES           AGE
+minikube   Ready    control-plane   2m
+```
+
+The important part is:
+
+```text
+STATUS = Ready
+```
+
+This means Kubernetes can use the node.
+
+---
+
+## Step 2 — Check the Cluster
+
+Run:
+
+```bash
+kubectl cluster-info
+```
+
+This shows information about your local Kubernetes control plane.
+
+You can also run:
+
+```bash
+kubectl get nodes
+```
+
+Remember the hierarchy:
+
+```text
+Minikube
+   ↓
+Kubernetes Cluster
+   ↓
+Node
+   ↓
+Pod
+   ↓
+Container
+```
+
+---
+
+## Step 3 — Create Your First Pod
+
+Let's create an Nginx Pod.
+
+```bash
+kubectl run nginx-pod --image=nginx
+```
+
+Breakdown of the command:
+
+```text
+kubectl
+→ Kubernetes CLI
+
+run
+→ create a workload / Pod
+
+nginx-pod
+→ name of our Pod
+
+--image=nginx
+→ container image
+```
+
+So we are telling Kubernetes:
+
+```text
+Create a Pod called nginx-pod
+and run the nginx image inside it.
+```
+
+Architecture:
+
+```text
+Minikube Node
+     │
+     └── Pod: nginx-pod
+            │
+            └── Container
+                   │
+                   └── nginx image
+```
+
+---
+
+## Step 4 — Check the Pod
+
+Run:
+
+```bash
+kubectl get pods
+```
+
+Initially, you may see:
+
+```text
+NAME        READY   STATUS              RESTARTS
+nginx-pod   0/1     ContainerCreating   0
+```
+
+After a few seconds:
+
+```text
+NAME        READY   STATUS    RESTARTS
+nginx-pod   1/1     Running   0
+```
+
+`1/1` means:
+
+```text
+Ready containers / Total containers
+
+1 / 1
+```
+
+So this Pod contains one container, and that container is ready.
+
+---
+
+## What Actually Happened?
+
+You typed:
+
+```bash
+kubectl run nginx-pod --image=nginx
+```
+
+The flow was approximately:
+
+```text
+You
+ ↓
+kubectl
+ ↓
+API Server
+ ↓
+Pod object created
+ ↓
+Scheduler
+ ↓
+Chooses Minikube Node
+ ↓
+Container runtime
+ ↓
+Downloads nginx image
+ ↓
+Starts nginx container
+```
+
+The Scheduler does not run the container itself.
+
+It decides:
+
+```text
+Which Node should run this Pod?
+```
+
+Then the selected Node runs the Pod and container.
+
+---
+
+## Step 5 — Inspect the Pod
+
+Run:
+
+```bash
+kubectl describe pod nginx-pod
+```
+
+This gives much more information than:
+
+```bash
+kubectl get pods
+```
+
+Think of them like this:
+
+```text
+kubectl get
+→ quick overview
+
+kubectl describe
+→ detailed information
+```
+
+You will see information such as:
+
+```text
+Pod name
+Node
+Container
+Image
+IP
+Status
+Events
+```
+
+The **Events** section is especially useful when something goes wrong.
+
+---
+
+## Step 6 — View Pod Logs
+
+To view logs from a Pod:
+
+```bash
+kubectl logs nginx-pod
+```
+
+General format:
+
+```bash
+kubectl logs <pod-name>
+```
+
+For example:
+
+```bash
+kubectl logs backend-pod
+```
+
+This is one of the commands you will use frequently when debugging Kubernetes applications.
+
+---
+
+## Step 7 — Enter the Container
+
+You can execute commands inside a running container.
+
+```bash
+kubectl exec -it nginx-pod -- /bin/bash
+```
+
+Conceptually:
+
+```text
+Your Terminal
+     ↓
+kubectl exec
+     ↓
+Pod
+     ↓
+nginx container
+     ↓
+Shell
+```
+
+Inside the container, you can run commands such as:
+
+```bash
+ls
+```
+
+or:
+
+```bash
+cat /etc/os-release
+```
+
+To leave the container:
+
+```bash
+exit
+```
+
+Some container images do not contain Bash.
+
+In that case, try:
+
+```bash
+kubectl exec -it nginx-pod -- /bin/sh
+```
+
+---
+
+## Step 8 — Delete the Pod
+
+Run:
+
+```bash
+kubectl delete pod nginx-pod
+```
+
+Then check:
+
+```bash
+kubectl get pods
+```
+
+The Pod disappears.
+
+We created the Pod directly:
+
+```text
+You
+ ↓
+Pod
+```
+
+There was no Deployment managing it.
+
+So after deleting it:
+
+```text
+Pod deleted
+     ↓
+Nothing recreates it
+```
+
+But with a Deployment:
+
+```text
+Deployment
+    ↓
+ReplicaSet
+    ↓
+Pod
+```
+
+If one Pod disappears, Kubernetes creates another one because the Deployment's desired state still requires it.
+
+This is why production applications are normally managed through **Deployments instead of standalone Pods**.
+
+---
+
+## Important Commands to Remember
+
+```bash
+minikube start
+
+kubectl get nodes
+
+kubectl cluster-info
+
+kubectl run nginx-pod --image=nginx
+
+kubectl get pods
+
+kubectl describe pod nginx-pod
+
+kubectl logs nginx-pod
+
+kubectl exec -it nginx-pod -- /bin/bash
+
+kubectl delete pod nginx-pod
+```
+
+---
+
+## Mental Model
+
+```text
+Laptop
+  ↓
+Minikube
+  ↓
+Kubernetes Cluster
+  ↓
+Node
+  ↓
+Pod
+  ↓
+Container
+  ↓
+nginx
+```
+
+When you issue a Kubernetes command:
+
+```text
+kubectl
+   ↓
+API Server
+   ↓
+Scheduler
+   ↓
+Node
+   ↓
+Pod
+   ↓
+Container
+```
+
+---
+
+## Lesson 21 MCQ
+
+You run:
+
+```bash
+kubectl run nginx-pod --image=nginx
+```
+
+and later:
+
+```bash
+kubectl delete pod nginx-pod
+```
+
+What will happen?
+
+**A.** Kubernetes automatically recreates the Pod  
+**B.** Minikube creates another Node  
+**C.** The Pod stays deleted because no Deployment is managing it  
+**D.** Kubernetes restarts the entire cluster
+
+
+
+
